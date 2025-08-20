@@ -1,42 +1,66 @@
+from __future__ import annotations
 import base64
-import json
-from flask import Flask, render_template, request
-from flask_cors import CORS
-import os
-from worker import speech_to_text, text_to_speech, chatbot_process_message
-import whisper
-from gtts import gTTS
 import io
-import wave
+import os
 import tempfile
+from typing import Dict, Union, Any
+
+from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
+from gtts import gTTS
 from pydub import AudioSegment
+import whisper
+
+from worker import chatbot_process_message
+
+# Configuration constants
+PORT = 8000
+WHISPER_MODEL_SIZE = 'base'
+ALLOWED_ORIGINS = '*'  # For local development
 
 app = Flask(__name__)
-cors = CORS(app, resources={r"/*": {"origins": "*"}})
+cors = CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}})
 
-# Load Whisper model
-WHISPER_MODEL = whisper.load_model("base")
+# Initialize Whisper model
+WHISPER_MODEL = whisper.load_model(WHISPER_MODEL_SIZE)
 
 
 @app.route('/', methods=['GET'])
-def index():
+def index() -> str:
+    """Render the main page of the application.
+    
+    Returns:
+        str: Rendered HTML template
+    """
     return render_template('index.html')
 
 
 @app.route('/speech-to-text', methods=['POST'])
-def speech_to_text_route():
-    if 'audio' not in request.files:
-        return {"error": "No audio file provided."}, 400
-    audio_file = request.files['audio']
-    audio_bytes = audio_file.read()
-    audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
-        audio.export(temp_audio.name, format='wav')
-        result = WHISPER_MODEL.transcribe(temp_audio.name)
-        text = result.get('text', '')
-        os.unlink(temp_audio.name)
-    return {"text": text.strip()}
-
+def speech_to_text_route() -> tuple[Dict[str, str], int]:
+    """Convert speech audio to text using Whisper model.
+    
+    Returns:
+        Dict[str, Union[str, int]]: Dictionary containing transcribed text or error message
+    """
+    try:
+        if 'audio' not in request.files:
+            return {"error": "No audio file provided."}, 400
+            
+        audio_file = request.files['audio']
+        audio_bytes = audio_file.read()
+        audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+            try:
+                audio.export(temp_audio.name, format='wav')
+                result = WHISPER_MODEL.transcribe(temp_audio.name)
+                text = str(result.get('text', '')).strip()
+                return {"text": text}, 200
+            finally:
+                os.unlink(temp_audio.name)
+                
+    except Exception as e:
+        return {"error": f"Speech to text conversion failed: {str(e)}"}, 500
 
 @app.route('/process-message', methods=['POST'])
 def process_message_route():

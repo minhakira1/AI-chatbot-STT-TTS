@@ -198,7 +198,7 @@ $(document).ready(function () {
       const formData = new FormData();
       formData.append("audio", audio.audioBlob, "recorded.wav");
       $.ajax({
-        url: "/speech-to-text",
+        url: baseUrl + "/speech-to-text",
         type: "POST",
         data: formData,
         processData: false,
@@ -239,7 +239,7 @@ $(document).ready(function () {
     const text = $("#tts-input").val();
     if (!text) return;
     $.ajax({
-      url: "/process-message",
+      url: baseUrl + "/process-message",
       type: "POST",
       contentType: "application/json",
       data: JSON.stringify({ text: text }),
